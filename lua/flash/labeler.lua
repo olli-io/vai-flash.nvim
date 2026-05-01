@@ -50,11 +50,6 @@ function M:reset()
       skip[l] = true
     end
   end
-  if not self.state.opts.search.max_length or #self.state.pattern() < self.state.opts.search.max_length then
-    for _, win in pairs(self.state.wins) do
-      self.labels = self:skip(win, self.labels)
-    end
-  end
   for _, m in ipairs(self.state.results) do
     if m.label ~= false then
       m.label = nil
@@ -221,83 +216,6 @@ function M:filter()
   end, ret)
 
   return ret
-end
-
--- Returns valid labels for the current search pattern
--- in this window.
----@param labels string[]
----@return string[] returns labels to skip or `nil` when all labels should be skipped
-function M:skip(win, labels)
-  local pattern = self.state.pattern.skip
-
-  -- skip all labels if the pattern is empty
-  if pattern == "" then
-    return {}
-  end
-
-  -- skip all labels if the pattern is invalid
-  local ok = pcall(vim.regex, pattern)
-  if not ok then
-    return {}
-  end
-
-  -- skip all labels if the pattern ends with a backslash
-  -- except if it's escaped
-  if pattern:find("\\$") and not pattern:find("\\\\$") then
-    return {}
-  end
-
-  vim.api.nvim_win_call(win, function()
-    while #labels > 0 do
-      -- For two-character combos, conflicts are determined by the FIRST char
-      -- only — once committed to label mode the second char disambiguates.
-      local first_chars = {} ---@type table<string, boolean>
-      for _, l in ipairs(labels) do
-        first_chars[l:sub(1, 1)] = true
-      end
-      local group_chars = vim.tbl_keys(first_chars)
-      local label_group = table.concat(group_chars, "")
-      if vim.go.ignorecase then
-        label_group = label_group:lower()
-      end
-
-      local p = "\\%(" .. pattern .. "\\)\\m\\zs[" .. label_group .. "]"
-      local pos
-      ok, pos = pcall(vim.fn.searchpos, p, "cnw")
-
-      if not ok then
-        labels = {}
-        break
-      end
-
-      -- not found, we're done
-      if pos[1] == 0 then
-        return
-      end
-
-      local line = vim.api.nvim_buf_get_lines(0, pos[1] - 1, pos[1], false)[1]
-      local char = vim.fn.strpart(line, pos[2] - 1, 1, true)
-
-      local label_count = #labels
-      labels = vim.tbl_filter(function(c)
-        -- compare against the first char of the combo; ignorecase mirrors
-        -- the regex search above
-        local first = c:sub(1, 1)
-        if vim.go.ignorecase then
-          return first:lower() ~= char:lower()
-        end
-        return first ~= char
-      end, labels)
-
-      -- HACK: this will fail if the pattern is an incomplete regex
-      -- In that case, we skip all labels
-      if label_count == #labels then
-        labels = {}
-        break
-      end
-    end
-  end)
-  return labels
 end
 
 return M
