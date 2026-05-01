@@ -7,8 +7,10 @@ local M = {}
 ---@field ns? string
 ---@field config? fun(opts:Flash.Config)
 local defaults = {
-  -- labels = "abcdefghijklmnopqrstuvwxyz",
-  labels = "asdfghjklqwertyuiopzxcvbnm",
+  -- Source alphabet for two-character jump labels.
+  -- Combos are generated as tier-1 doubles (aa, ss, dd, ...) followed by
+  -- tier-2 pairs (as, ad, ..., sa, sd, ...). Closest matches receive doubles.
+  labels = "asdfgjklwertyuiocvn",
   search = {
     -- search/jump in all windows
     multi_window = true,
@@ -74,7 +76,7 @@ local defaults = {
   },
   label = {
     -- allow uppercase labels
-    uppercase = true,
+    uppercase = false,
     -- add any labels with the correct case here, that you want to exclude
     exclude = "",
     -- add a label for the first match in the current window.
@@ -215,7 +217,6 @@ local defaults = {
     -- options used for treesitter selections
     -- `require("flash").treesitter()`
     treesitter = {
-      labels = "abcdefghijklmnopqrstuvwxyz",
       jump = { pos = "range", autojump = true },
       search = { incremental = false },
       label = { before = true, after = true, style = "inline" },
