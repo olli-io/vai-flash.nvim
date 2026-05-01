@@ -80,16 +80,34 @@ function M:labels()
   if self.opts.label.uppercase then
     labels = labels .. self.opts.labels:upper()
   end
-  local list = vim.fn.split(labels, "\\zs")
-  local ret = {} ---@type string[]
-  local added = {} ---@type table<string, boolean>
+
+  local excluded = {} ---@type table<string, boolean>
   for _, l in ipairs(vim.fn.split(self.opts.label.exclude, "\\zs")) do
-    added[l] = true
+    excluded[l] = true
   end
-  for _, l in ipairs(list) do
-    if not added[l] then
-      added[l] = true
-      ret[#ret + 1] = self:lmap(l)
+
+  local chars = {} ---@type string[]
+  local seen = {} ---@type table<string, boolean>
+  for _, l in ipairs(vim.fn.split(labels, "\\zs")) do
+    local mapped = self:lmap(l)
+    if not excluded[mapped] and not seen[mapped] then
+      seen[mapped] = true
+      chars[#chars + 1] = mapped
+    end
+  end
+
+  -- Build two-character combos: tier-1 doubles first (closest matches get the
+  -- easiest combos via the distance-sorted filter in labeler.lua), then tier-2
+  -- pairs in source-alphabet order.
+  local ret = {} ---@type string[]
+  for _, c in ipairs(chars) do
+    ret[#ret + 1] = c .. c
+  end
+  for _, a in ipairs(chars) do
+    for _, b in ipairs(chars) do
+      if a ~= b then
+        ret[#ret + 1] = a .. b
+      end
     end
   end
   return ret
@@ -202,7 +220,31 @@ function M:find(opts)
   return ret
 end
 
--- Checks if the given pattern is a jump label and jumps to it.
+---@param label string
+function M:has_label(label)
+  for _, m in ipairs(self.results) do
+    if m.label == label then
+      return true
+    end
+  end
+  return false
+end
+
+---@param c string
+function M:has_label_prefix(c)
+  for _, m in ipairs(self.results) do
+    if type(m.label) == "string" and m.label:sub(1, 1) == c then
+      return true
+    end
+  end
+  return false
+end
+
+-- Checks if the given pattern carries a (partial) two-character jump label.
+-- Returns true to abort pattern advance: either the label resolved to a jump,
+-- the label attempt was committed and failed (abort the loop), or the first
+-- character is a valid label prefix and we should wait for the second char.
+-- Returns nil to let the pattern extend normally.
 ---@param pattern string
 function M:check_jump(pattern)
   if not self.visible then
@@ -212,12 +254,35 @@ function M:check_jump(pattern)
   if self.opts.search.trigger ~= "" and self.pattern():sub(-1) ~= self.opts.search.trigger then
     return
   end
+  if pattern:find(self.pattern(), 1, true) ~= 1 then
+    -- Pattern doesn't extend the confirmed pattern (shrank or changed);
+    -- discard any pending label prefix.
+    self._partial = nil
+    return
+  end
+
   local chars = vim.fn.strchars(pattern)
-  if pattern:find(self.pattern(), 1, true) == 1 and chars == vim.fn.strchars(self.pattern()) + 1 then
-    local label = vim.fn.strcharpart(pattern, chars - 1, 1)
-    if self:jump(label) then
+  local base = vim.fn.strchars(self.pattern())
+
+  if self._partial and chars == base + 2 then
+    local label = vim.fn.strcharpart(pattern, base, 2)
+    self._partial = nil
+    if self:has_label(label) and self:jump(label) then
       return true
     end
+    -- Two chars consumed in label mode; abort the loop rather than letting
+    -- the pattern advance with an unintended tail.
+    return true
+  elseif chars == base + 1 then
+    local first = vim.fn.strcharpart(pattern, base, 1)
+    if self:has_label_prefix(first) then
+      self._partial = first
+      return true
+    end
+    self._partial = nil
+  else
+    -- Any other diff (zero, larger than 2, or non-extending) clears partial.
+    self._partial = nil
   end
 end
 
@@ -394,8 +459,17 @@ function M:step(opts)
 
   local orig = self.pattern()
 
-  -- break if we jumped
-  if self:update({ pattern = self.pattern:extend(c) }) then
+  -- When waiting for the second char of a two-character label, append both
+  -- the stored first char and the new char so check_jump sees a +2 extension
+  -- against the confirmed pattern.
+  local input = self._partial and (self._partial .. c) or c
+
+  -- break if we jumped or aborted a label attempt; keep looping if we're
+  -- newly waiting for the second char of a two-character label.
+  if self:update({ pattern = self.pattern:extend(input) }) then
+    if self._partial then
+      return true
+    end
     return
   end
 
@@ -428,6 +502,7 @@ end
 
 ---@param opts? Flash.Step.Options
 function M:loop(opts)
+  self._partial = nil
   while self:step(opts) do
   end
   self:hide()
