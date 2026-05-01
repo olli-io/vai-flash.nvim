@@ -178,8 +178,14 @@ function M:skip(win, labels)
 
   vim.api.nvim_win_call(win, function()
     while #labels > 0 do
-      -- this is needed, since an uppercase label would trigger smartcase
-      local label_group = table.concat(labels, "")
+      -- For two-character combos, conflicts are determined by the FIRST char
+      -- only — once committed to label mode the second char disambiguates.
+      local first_chars = {} ---@type table<string, boolean>
+      for _, l in ipairs(labels) do
+        first_chars[l:sub(1, 1)] = true
+      end
+      local group_chars = vim.tbl_keys(first_chars)
+      local label_group = table.concat(group_chars, "")
       if vim.go.ignorecase then
         label_group = label_group:lower()
       end
@@ -203,12 +209,13 @@ function M:skip(win, labels)
 
       local label_count = #labels
       labels = vim.tbl_filter(function(c)
-        -- when ignorecase is set, we need to skip
-        -- both the upper and lower case labels
+        -- compare against the first char of the combo; ignorecase mirrors
+        -- the regex search above
+        local first = c:sub(1, 1)
         if vim.go.ignorecase then
-          return c:lower() ~= char:lower()
+          return first:lower() ~= char:lower()
         end
-        return c ~= char
+        return first ~= char
       end, labels)
 
       -- HACK: this will fail if the pattern is an incomplete regex
