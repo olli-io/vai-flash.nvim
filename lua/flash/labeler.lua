@@ -129,6 +129,51 @@ function M:filter()
     end
   end
 
+  -- Collapse runs of identical single-character matches. For repeating char
+  -- patterns like `------`, `=====`, `((`, `{{`, only the leftmost match in
+  -- each run is labeled — labeling every char produces visually indistinct
+  -- back-to-back labels with no buffer chars in between. Multi-char matches
+  -- (e.g. `foofoo` searching `foo`) are left for the visual-overlap filter
+  -- below.
+  do
+    local by_line = {} ---@type table<string, Flash.Match[]>
+    for _, m in ipairs(ret) do
+      local key = m.win .. ":" .. m.pos[1]
+      by_line[key] = by_line[key] or {}
+      table.insert(by_line[key], m)
+    end
+    local drop = {} ---@type table<table, boolean>
+    for _, line_matches in pairs(by_line) do
+      if #line_matches > 1 then
+        table.sort(line_matches, function(a, b)
+          return a.pos[2] < b.pos[2]
+        end)
+        local first = line_matches[1]
+        local buf = vim.api.nvim_win_get_buf(first.win)
+        local line_text = (vim.api.nvim_buf_get_lines(buf, first.pos[1] - 1, first.pos[1], false) or {})[1] or ""
+        for i = 2, #line_matches do
+          local prev = line_matches[i - 1]
+          local cur = line_matches[i]
+          local prev_one = prev.end_pos[2] == prev.pos[2]
+          local cur_one = cur.end_pos[2] == cur.pos[2]
+          if
+            prev_one
+            and cur_one
+            and cur.pos[2] == prev.pos[2] + 1
+            and line_text:sub(prev.pos[2] + 1, prev.pos[2] + 1) == line_text:sub(cur.pos[2] + 1, cur.pos[2] + 1)
+          then
+            drop[cur] = true
+          end
+        end
+      end
+    end
+    if next(drop) then
+      ret = vim.tbl_filter(function(m)
+        return not drop[m]
+      end, ret)
+    end
+  end
+
   -- sort by current win, other win, then by distance
   table.sort(ret, function(a, b)
     local use_distance = self.state.opts.label.distance and a.win == self.state.win
