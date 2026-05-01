@@ -149,6 +149,32 @@ function M:filter()
     end
     return a.pos[2] < b.pos[2]
   end)
+
+  -- Two-character labels overlay the match starting at pos. A match's
+  -- visual footprint is therefore [pos, max(end_pos, pos + label_width - 1)]:
+  -- whichever extends further, the match text or the label overlay. Adjacent
+  -- matches whose footprints overlap on the same line drop the further one
+  -- (closer matches win via the distance sort above), so labels never collide
+  -- with each other or with another match's text.
+  local label_width = 2
+  local accepted = {} ---@type table<string, {left:number,right:number}[]>
+  ret = vim.tbl_filter(function(m)
+    local key = m.win .. ":" .. m.pos[1]
+    local m_left = m.pos[2]
+    local m_right = math.max(m.end_pos[2], m.pos[2] + label_width - 1)
+    local items = accepted[key]
+    if items then
+      for _, p in ipairs(items) do
+        if m_left <= p.right and p.left <= m_right then
+          return false
+        end
+      end
+    end
+    accepted[key] = accepted[key] or {}
+    table.insert(accepted[key], { left = m_left, right = m_right })
+    return true
+  end, ret)
+
   return ret
 end
 

@@ -83,9 +83,11 @@ local defaults = {
     -- you can always jump to the first match with `<CR>`
     current = true,
     -- show the label after the match
-    after = true, ---@type boolean|number[]
-    -- show the label before the match
-    before = false, ---@type boolean|number[]
+    after = false, ---@type boolean|number[]
+    -- show the label before the match. With offset {0, 0} the 2-char label
+    -- overlays the first chars of the match itself, replacing the search
+    -- character on screen (vai-style rendering).
+    before = { 0, 0 }, ---@type boolean|number[]
     -- position of the label extmark
     style = "overlay", ---@type "eol" | "overlay" | "right_align" | "inline"
     -- flash tries to re-use labels that were already assigned to a position,

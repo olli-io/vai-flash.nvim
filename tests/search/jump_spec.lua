@@ -62,6 +62,8 @@ describe("jump", function()
     assert.same({ 1, 6 }, vim.api.nvim_buf_get_mark(0, ">"))
   end)
 
+  -- {"test", "test2", "test3"}
+
   -- it("yanks to start", function()
   --   assert.same({ 1, 0 }, vim.api.nvim_win_get_cursor(0))
   --   local match = {
