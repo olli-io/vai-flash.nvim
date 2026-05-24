@@ -75,11 +75,11 @@ function M.mode(motion)
     c = c:gsub("\\", "\\\\")
     local pattern ---@type string
     if motion == "t" then
-      pattern = "\\m.\\ze\\V" .. c
+      pattern = "\\m.\\ze\\V" .. c .. "\\c"
     elseif motion == "T" then
-      pattern = "\\V" .. c .. "\\zs\\m."
+      pattern = "\\V" .. c .. "\\zs\\m.\\c"
     else
-      pattern = "\\V" .. c
+      pattern = "\\V" .. c .. "\\c"
     end
     if not Config.get("char").multi_line then
       local pos = vim.api.nvim_win_get_cursor(0)
